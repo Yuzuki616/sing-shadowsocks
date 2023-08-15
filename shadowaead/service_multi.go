@@ -159,6 +159,7 @@ func (s *MultiService[U]) newPacket(ctx context.Context, conn N.PacketConn, buff
 	}
 	var readCipher cipher.AEAD
 	var err error
+	packet := make([]byte, 0, buffer.Len()-method.keySaltLength)
 	for u, m := range s.methodMap {
 		key := buf.NewSize(m.keySaltLength)
 		Kdf(m.key, buffer.To(m.keySaltLength), key)
@@ -167,15 +168,14 @@ func (s *MultiService[U]) newPacket(ctx context.Context, conn N.PacketConn, buff
 		if err != nil {
 			return err
 		}
-		var packet []byte
-		packet, err = readCipher.Open(buffer.Index(m.keySaltLength), rw.ZeroBytes[:readCipher.NonceSize()], buffer.From(m.keySaltLength), nil)
+		packet, err = readCipher.Open(packet, rw.ZeroBytes[:readCipher.NonceSize()], buffer.From(m.keySaltLength), nil)
 		if err != nil {
+			packet = packet[0:0]
 			continue
 		}
-
+		copy(buffer.From(m.keySaltLength), packet)
 		buffer.Advance(m.keySaltLength)
 		buffer.Truncate(len(packet))
-
 		user, method = u, m
 		break
 	}
